@@ -76,16 +76,25 @@ impl Drop for FontExt {
 
 impl FontExt {
     fn new(font: Font) -> Self {
-        let handle = font.handle();
-        let (data, idx) = match handle.as_ref() {
-            Some(Handle::Memory { bytes, font_index }) => (&bytes[..], *font_index),
+        let (data_arc, idx) = match font.handle() {
+            Some(Handle::Memory { bytes, font_index }) => (bytes, font_index),
             _ => unreachable!(),
         };
-        let face = unsafe {
-            std::mem::transmute::<_, Option<Face<'static>>>(
-                ttf_parser::Face::from_slice(data, idx).ok(),
+
+        // data_arc should probably be `Pin<Arc<[u8]>>` but that's on the font-kit library
+        // We'll just assume the data never changes or moves.
+        // Then this is safe because along with the data we are storing the owner of the `Arc<Vec<u8>>` in the struct.
+        let data: &'static [u8] = unsafe {
+            std::mem::transmute(
+                data_arc.as_slice()
             )
         };
+
+        let face = ttf_parser::Face::from_slice(
+            data,
+            idx
+        ).ok();
+
         Self { inner: font, face }
     }
 
